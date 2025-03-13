@@ -3,21 +3,23 @@ import connectDB from './db/index.js';
 import { app } from './app.js';
 // import { asyncHandler } from './utils/asyncHandler.js';
 
-const port = process.env.PORT || 3000;
-
 dotenv.config({
-    path: './env'
+    path: '../.env'
 })
 
-connectDB().then(() => {
+const port = process.env.PORT || 5000;
+
+connectDB()
+.then(() => {
     app.on('error', (error) => {
         console.error('Error: ', error);
         throw error;    
     })
 
-    app.listen(port, () => {
+    app.listen(port,  () => {
         console.log(`Server is running on port ${port}`);
     });
+
 }).catch((error) => {
     console.log('MongoDB connection failed... : ', error);
 })
