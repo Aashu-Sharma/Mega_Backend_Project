@@ -13,7 +13,7 @@ app.use(cors({
 
 // multer is a third party package that is used to handle upload files to the server
 app.use(express.json({
-    limit: '20kb',
+    limit: '30kb',
 }));
 
 app.use(express.urlencoded({
