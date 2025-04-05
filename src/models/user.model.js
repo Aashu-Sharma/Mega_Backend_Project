@@ -61,12 +61,10 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.pre("save", async function (next) {
-  if(this.isModified('password')){
-    this.password = await bcrypt.hash(this.password, 18);
-    next();
-  }else{
-    next();
-  }
+  if(!this.isModified("password")) return next();
+  
+  this.password = await bcrypt.hash(this.password, 10);
+  next(); 
 }); // it will run just before the user is saved to the database;
 
 userSchema.methods.isPasswordCorrect = async function (password){
