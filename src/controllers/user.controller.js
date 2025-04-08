@@ -1,9 +1,13 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  uploadOnCloudinary,
+  deletFromCloudinary,
+} from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -292,23 +296,26 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
   const avatar = await uploadOnCloudinary(avatarPath);
 
-  if(!avatar.url) throw new ApiError(400, 'Error while uploading the avatar');
+  if (!avatar.url) throw new ApiError(400, "Error while uploading the avatar");
+
+  // delete the old avatar from cloudinary
+
+  if (req.user?.avatar) await deletFromCloudinary(req.user?.avatar);
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
         avatar: avatar.url,
-      }
+      },
     },
 
-    {new: true}
+    { new: true }
   ).select("-password");
 
   return res
-        .status(200)
-        .json(new ApiResponse(201, user, "avatar updated successfully"))
-
+    .status(200)
+    .json(new ApiResponse(201, user, "avatar updated successfully"));
 });
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
@@ -317,23 +324,147 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 
   const coverImage = await uploadOnCloudinary(coverPath);
 
-  if(!coverImage.url) throw new ApiError(400, 'Error while uploading the coverImage');
+  if (!coverImage.url)
+    throw new ApiError(400, "Error while uploading the coverImage");
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
         coverImage: coverImage.url,
-      }
+      },
     },
 
-    {new: true}
+    { new: true }
   ).select("-password");
 
   return res
-        .status(200)
-        .json(new ApiResponse(201, user, "coverImage updated successfully"))
+    .status(200)
+    .json(new ApiResponse(201, user, "coverImage updated successfully"));
+});
 
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+
+  if (!username?.trim()) throw new ApiError(400, "Username is required");
+
+  // creating aggregation pipeline to get the user channel profile.
+
+  const channel = await User.aggregate([
+    {
+      $match: {
+        username: username?.toLowerCase(),
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
+    },
+
+    {
+      $addFields: {
+        subscribersCount: { $size: "$subscribers" },
+        subscribedToCount: { $size: "$subscribedTo" },
+        isSubscribed: {
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+
+    {
+      $project: {
+        fullName: 1,
+        username: 1,
+        email: 1,
+        subscribersCount: 1,
+        subscribedToCount: 1,
+        isSubscribed: 1,
+        avatar: 1,
+        coverImage: 1,
+      },
+    },
+  ]);
+
+  console.log("Channel: ", channel);
+
+  if (!channel?.length) throw new ApiError(404, "channel not found");
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, channel[0], "channel profile fetched successfully")
+    );
+});
+
+// Note: _id returns a string, but due to mongoose it is converted to an objectId.
+// Here, we will need to access the ObjectId of the user to get the watch history.
+const getUserWatchHistory = asyncHandler(async (req, res) => {
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(req.user?._id),
+      },
+    }, // return the user with the given id
+    {
+      $lookup: {
+        from: "videos",
+        foreignField: "_id",
+        localField: "watchHistory",
+        as: "watchHistory",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
+                {
+                  $project: {
+                    fullName: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          }, // returned the owner of the video with the given id as array.
+
+          {
+            $addFields: {
+              owner: {
+                $first: "$owner", // gets the owner details as object from the owner Field which was an array.
+              }
+            }
+          }
+        ],
+      },
+    },
+  ]);
+
+  if(!user?.length) throw new ApiError(404, "user not found");
+  console.log("User: ", user);
+  console.log("Watch History: ", user[0]?.watchHistory);
+
+  return res
+         .status(200)
+         .json(new ApiResponse(201, user[0]?.watchHistory, "Watch history fetched successfully"));
 });
 
 export {
@@ -345,5 +476,7 @@ export {
   getCurrentUser,
   updateAccountDetails,
   updateUserAvatar,
-  updateUserCoverImage
+  updateUserCoverImage,
+  getUserChannelProfile,
+  getUserWatchHistory
 };
