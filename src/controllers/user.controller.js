@@ -15,7 +15,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
 
-    user.refreshToken = refreshToken;
+    user.refreshToken = refreshToken; //saving the refreshToken in database
     await user.save({ validateBeforeSave: false });
 
     return { accessToken, refreshToken };
@@ -127,11 +127,10 @@ const loginUser = asyncHandler(async (req, res) => {
   // find the user based on email or username;
   // check the password sent by user with one stored in database.
   // if matched send refresh and accessTokens to the user in the form of secured cookies.
-
-  const { email, username, password } = req.body;
-  console.log(email);
-  console.log(req.body);
-
+  
+  // console.log(req.body);
+  const { email, username, password} = req.body;
+  // console.log(email);
   if (!username && !email) throw new ApiError(401, "All fields are required");
 
   const user = await User.findOne({
@@ -149,14 +148,18 @@ const loginUser = asyncHandler(async (req, res) => {
     user._id
   );
 
+  console.log("Access Token: ", accessToken);
+  console.log("Refresh Token: ", refreshToken);
+
   const loggedInUser = await User.findById(user._id).select(
     "-password -refreshToken"
-  );
+  ); // user to be send to the client.
+  //need to remove the password and refresh token from the user object as they are not needed in the response. However, we need to send the refresh token in the cookies.
 
   const options = {
     httpOnly: true,
     secure: true,
-  };
+  }; //help make the cookies more secure by making it non-modifiable by frontend.
 
   return res
     .status(200)
@@ -168,7 +171,7 @@ const loginUser = asyncHandler(async (req, res) => {
         {
           user: loggedInUser,
           accessToken,
-          refreshToken,
+          refreshToken, //sending the tokens to handle the sidecase of cookie not being set in some cases.
         },
 
         "User logged in successfully"
@@ -180,8 +183,8 @@ const logOutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     req.user._id,
     {
-      $set: {
-        refreshToken: undefined,
+      $unset: {
+        refreshToken: 1,
       },
     },
 
@@ -450,21 +453,27 @@ const getUserWatchHistory = asyncHandler(async (req, res) => {
             $addFields: {
               owner: {
                 $first: "$owner", // gets the owner details as object from the owner Field which was an array.
-              }
-            }
-          }
+              },
+            },
+          },
         ],
       },
     },
   ]);
 
-  if(!user?.length) throw new ApiError(404, "user not found");
+  if (!user?.length) throw new ApiError(404, "user not found");
   console.log("User: ", user);
   console.log("Watch History: ", user[0]?.watchHistory);
 
   return res
-         .status(200)
-         .json(new ApiResponse(201, user[0]?.watchHistory, "Watch history fetched successfully"));
+    .status(200)
+    .json(
+      new ApiResponse(
+        201,
+        user[0]?.watchHistory,
+        "Watch history fetched successfully"
+      )
+    );
 });
 
 export {
@@ -478,5 +487,5 @@ export {
   updateUserAvatar,
   updateUserCoverImage,
   getUserChannelProfile,
-  getUserWatchHistory
+  getUserWatchHistory,
 };

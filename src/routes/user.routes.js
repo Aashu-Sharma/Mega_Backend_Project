@@ -28,7 +28,7 @@ router.route("/register").post(
       name: "coverImage",
       maxCount: 1,
     },
-  ]),
+  ]), // middleware to handle file uploads
   registerUser
 );
 

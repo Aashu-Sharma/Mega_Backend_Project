@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt'
+import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 
 // both jwt and bcrypt are used to hash the password and generate the token. they deal with encryption and decryption of the password and token; jwt is used to generate the token and bcrypt is used to hash the password;
 
@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     trim: true,
-  }, 
+  },
 
   fullName: {
     type: String,
@@ -46,8 +46,8 @@ const userSchema = new mongoose.Schema({
   watchHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Video',
-    }
+      ref: "Video",
+    },
   ],
 
   password: {
@@ -57,39 +57,46 @@ const userSchema = new mongoose.Schema({
 
   refreshToken: {
     type: String,
-  }
+  },
 });
 
 userSchema.pre("save", async function (next) {
-  if(!this.isModified("password")) return next();
-  
+  if (!this.isModified("password")) return next();
+
   this.password = await bcrypt.hash(this.password, 10);
-  next(); 
-}); // it will run just before the user is saved to the database;
+  next();
+}); // it will run just before the user is saved to the database; and it hashes the password before saving it in database
 
-userSchema.methods.isPasswordCorrect = async function (password){
-  return await bcrypt.compare(password, this.password)
-} // when this method will be called it will compare the password sent by user and the one saved in the database in encrypted form;
+userSchema.methods.isPasswordCorrect = async function (password) {
+  return await bcrypt.compare(password, this.password);
+}; // when this method will be called it will compare the password sent by user and the one saved in the database in encrypted form;
 
-userSchema.methods.generateAccessToken = function(){
-  return jwt.sign({
+userSchema.methods.generateAccessToken = function () {
+  return jwt.sign(
+    {
       _id: this._id,
       username: this.username,
       email: this.email,
       fullName: this.fullName,
-  }, 
-  process.env.ACCESS_TOKEN_SECRET,
-  {expiresIn: process.env.ACCESS_TOKEN_EXPIRY} 
-) 
+    }, // payload
+    process.env.ACCESS_TOKEN_SECRET, // security key
+    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY } //
+  );
 };
 
-userSchema.methods.generateRefreshToken = function(){
-  return jwt.sign({
-    _id: this._id,
-  }, 
-  process.env.REFRESH_TOKEN_SECRET,
-  {expiresIn: process.env.REFRESH_TOKEN_EXPIRY}
-  ) 
+userSchema.methods.generateRefreshToken = function () {
+  return jwt.sign(
+    {
+      _id: this._id,
+    },
+    process.env.REFRESH_TOKEN_SECRET,
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
+  );
 };
 
 export const User = mongoose.model("User", userSchema);
+
+
+// the single user object created with user model will have access of these methods.
+
+// jwt is a bearer token which acts like a key. Similar to how the key works, the jwt allows user to access the resoources if they have the right key.
