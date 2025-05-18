@@ -6,7 +6,7 @@ import {
   deletFromCloudinary,
 } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
-import mongoose from "mongoose";
+import mongoose, {isValidObjectId} from "mongoose";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const {
@@ -141,15 +141,27 @@ const getVideoById = asyncHandler(async (req, res) => {
 
   console.log("VideoId: ", videoId);
 
-  // i don't need to use aggregation pipeline here as i can simply find the video by videoId; and send necessary details.
+  if(!isValidObjectId(videoId))
+    throw new ApiError(400, "Invalid VideoId");
 
-  // const video = await Video.findById(videoId).populate("owner", "fullName username avatar");
+  const incrementResult = await Video.updateOne(
+    {
+      _id: videoId,
+    },
+
+    {
+      $inc: {views: 1},
+    }
+  )
+
+  if(incrementResult.matchedCount === 0)
+    throw new ApiError(404, "no video was found");
 
   const video = await Video.aggregate([
     {
       $match: {
         _id: new mongoose.Types.ObjectId(videoId),
-      }
+      },
     },
 
     {
@@ -164,14 +176,14 @@ const getVideoById = asyncHandler(async (req, res) => {
               from: "subscriptions",
               localField: "_id",
               foreignField: "channel",
-              as: "subscribers"
-            }
+              as: "subscribers",
+            },
           },
 
           {
             $addFields: {
-              subscribersCount: {$size: "$subscribers"}
-            }
+              subscribersCount: { $size: "$subscribers" },
+            },
           },
 
           {
@@ -180,18 +192,18 @@ const getVideoById = asyncHandler(async (req, res) => {
               username: 1,
               avatar: 1,
               subscribersCount: 1,
-            }
-          }
-        ]
-      }
+            },
+          },
+        ],
+      },
     },
 
     {
       $addFields: {
         owner: {
-          $first: "$owner"
-        }
-      }
+          $first: "$owner",
+        },
+      },
     },
 
     {
@@ -204,9 +216,9 @@ const getVideoById = asyncHandler(async (req, res) => {
         views: 1,
         isPublished: 1,
         owner: 1,
-      }
-    }
-  ])
+      },
+    },
+  ]);
 
   if (!video) throw new ApiError(401, "Unable to get the video for you!!!");
 
