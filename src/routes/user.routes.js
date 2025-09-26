@@ -32,6 +32,7 @@ router.route("/register").post(
   registerUser
 );
 
+
 router.route("/login").post(loginUser);
 
 router.route("/logOut").post(verifyJwt, logOutUser);

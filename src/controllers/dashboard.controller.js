@@ -1,5 +1,6 @@
 import mongoose, { isValidObjectId } from "mongoose";
 import { Video } from "../models/video.model.js";
+import { Playlist } from "../models/playlist.model.js";
 import { Like } from "../models/like.model.js";
 import { Subscription } from "../models/subscription.model.js";
 import { ApiError } from "../utils/apiError.js";
@@ -46,7 +47,8 @@ const getChannelStats = asyncHandler(async (req, res) => {
     },
   ]);
 
-  const totalViews = totalViewsResult.length > 0 ? totalViewsResult[0].totalViews : 0;
+  const totalViews =
+    totalViewsResult.length > 0 ? totalViewsResult[0].totalViews : 0;
 
   if (!totalViewsResult.length === 0)
     throw new ApiError(500, "An error occured while displaying totalViews");
@@ -164,4 +166,132 @@ const getChannelVideos = asyncHandler(async (req, res) => {
     );
 });
 
-export { getChannelStats, getChannelVideos };
+const getChannelPlaylists = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+
+  if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
+
+  const { page = 1, limit = 10 } = req.query;
+  const skip = (page - 1) * limit;
+
+  const channelPlaylists = await Playlist.aggregate([
+    {
+      $match: {
+        owner: new mongoose.Types.ObjectId(userId),
+      },
+    },
+
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $lookup: {
+        from: "videos",
+        localField: "videos",
+        foreignField: "_id",
+        as: "videos",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
+                {
+                  $project: {
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+
+          {
+            $addFields: {
+              owner: {
+                $first: "$owner",
+              },
+            },
+          },
+
+          {
+            $project: {
+              videoFile: 1,
+              thumbnail: 1,
+              title: 1,
+              duration: 1,
+              views: 1,
+              owner: 1,
+            },
+          }
+        ],
+      },
+    },
+
+    {
+      $addFields: {
+        owner: {
+          $first: "$owner"
+        }
+      }
+    },
+
+    {
+      $project: {
+        name: 1,
+        description: 1,
+        owner: 1,
+        videos: 1,
+      }
+    },
+
+    {
+      $sort: {
+        createdAt: -1,
+      }
+    },
+
+    {
+      $skip: skip,
+    },
+
+    {
+      $limit: parseInt(limit),
+    },
+  ]);
+
+  console.log("Channel Playlists: ", channelPlaylists);
+
+  if(!channelPlaylists || channelPlaylists.length === 0){
+    return res
+          .status(200)
+          .json(
+            new ApiResponse(200, [], "No playlists found for this user")
+          )
+  }
+
+  return res
+        .status(200)
+        .json(
+          new ApiResponse(200, channelPlaylists, "Successfully fetched all the playlists")
+        )
+  
+});
+
+export { getChannelStats, getChannelVideos, getChannelPlaylists };

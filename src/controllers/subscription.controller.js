@@ -13,6 +13,10 @@ const toggleSubscription = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(channelId)) throw new ApiError(400, "Invalid ChannelId");
 
+  if(channelId === userId){
+    throw new ApiError(403, "Users can't subscribe their own channels" );
+  }
+
   const existingSubscription = await Subscription.findOneAndDelete({
     channel: new mongoose.Types.ObjectId(channelId),
     subscriber: new mongoose.Types.ObjectId(userId),
@@ -151,4 +155,29 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
     );
 });
 
-export { toggleSubscription, getUserChannelSubscribers, getSubscribedChannels };
+const checkIfSubscribed = asyncHandler(async(req, res) => {
+  const {channelId} = req.params;
+  const userId = req.user?._id;
+
+  if (!isValidObjectId(userId))
+    throw new ApiError(400, "Please login first to continue");
+
+  if (!isValidObjectId(channelId)) throw new ApiError(400, "Invalid ChannelId");
+
+  const hasSubscribed = await Subscription.findOne({
+    channel: new mongoose.Types.ObjectId(channelId),
+    subscriber: new mongoose.Types.ObjectId(userId),
+  });
+
+  console.log("hasSubscribed Document: ", hasSubscribed);
+
+  const isSubscribed = hasSubscribed ? true : false;
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200, isSubscribed, "Sent subscription status")
+  )
+})
+
+export { toggleSubscription, getUserChannelSubscribers, getSubscribedChannels,checkIfSubscribed };

@@ -137,7 +137,7 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
 });
 
 const getLikedVideos = asyncHandler(async (req, res) => {
-  const userId = req.user?._id; 
+  const userId = req.user?._id;
 
   if (!isValidObjectId(userId))
     throw new ApiError(400, "Please login first to continue");
@@ -147,8 +147,8 @@ const getLikedVideos = asyncHandler(async (req, res) => {
       $match: {
         likedBy: new mongoose.Types.ObjectId(userId),
         video: {
-            $exists: true,
-        }
+          $exists: true,
+        },
       },
     },
 
@@ -200,30 +200,202 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     },
 
     {
-        $addFields: {
-            likedVideo: {
-              $first: "$video"
-            },
-        }
+      $addFields: {
+        likedVideo: {
+          $first: "$video",
+        },
+      },
     },
 
     {
-        $project: {
-            likedVideo: 1,
-        }
-    }
+      $project: {
+        likedVideo: 1,
+      },
+    },
   ]);
 
-  if(!Likedvideos)
-    throw new ApiError(500, "There was an error while displaying your likedVideos");
+  if (!Likedvideos)
+    throw new ApiError(
+      500,
+      "There was an error while displaying your likedVideos"
+    );
 
   console.log("LikedVideos: ", Likedvideos);
 
   return res
-        .status(200)
-        .json(
-            new ApiResponse(200, Likedvideos, "successfully fetched the likedVideos")
-        )
+    .status(200)
+    .json(
+      new ApiResponse(200, Likedvideos, "successfully fetched the likedVideos")
+    );
 });
 
-export { toggleCommentLike, toggleTweetLike, toggleVideoLike, getLikedVideos };
+const getLikedComments = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  const { commentIds } = req.body; // Array of comment IDs to check
+
+  if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
+
+  if( !Array.isArray(commentIds) || commentIds.length === 0)
+    throw new ApiError(400, "CommentIds must be provided");
+
+  const LikedComments = await Like.find(
+    {
+      likedBy: new mongoose.Types.ObjectId(userId),
+      // comment: {
+      //   $exists: true,
+      // }// it gives all liked comments by the user irrespective of the video under which the comments were made.
+
+      comment: {
+        $in : commentIds.map((id) => new mongoose.Types.ObjectId(id))
+      }
+    },
+
+    {
+      comment: 1,
+      _id: 0,
+    }
+  );
+
+  const LikedCommentIds = LikedComments.map((like) => like.comment);
+
+  if (LikedCommentIds === null)
+    throw new ApiError(500, "Some error occured while fetching liked comments");
+
+  console.log("LikedComments: ", LikedCommentIds);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        LikedCommentIds,
+        "Successfully fetched the liked comments"
+      )
+    )
+});
+
+const getVideoLikesCount = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  const userId = req.user?._id;
+
+  if (!videoId) throw new ApiError(401, "invalid videoId");
+
+  if (!userId) throw new ApiError(401, "Please login first");
+
+  const totalLikes = await Like.countDocuments({
+    video: new mongoose.Types.ObjectId(videoId),
+  });
+
+  console.log("Total likes on video: ", totalLikes);
+
+  if (totalLikes === null)
+    throw new ApiError(500, "Some error occured while displaying likes count");
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        totalLikes,
+        "Successfully fetched total likes on the video"
+      )
+    );
+});
+
+const getCommentLike = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  const { commentId } = req.params;
+
+  if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
+
+  if (!isValidObjectId(commentId)) throw new ApiError(400, "Invalid videoId");
+
+  const totalLike = await Like.countDocuments({
+    comment: new mongoose.Types.ObjectId(commentId),
+  });
+
+  if (totalLike === null)
+    throw new ApiError(
+      500,
+      "Sorry, there was an error fetching likes on the comment"
+    );
+
+  console.log(`totalLikesOnCommentId ${commentId}: ${totalLike} `);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        totalLike,
+        `Successfully fetched the likes on commentId ${commentId}`
+      )
+    );
+});
+
+const getCommentLikesCount = asyncHandler(async (req, res) => {
+  //For bulk
+  const userId = req.user?._id;
+  const { commentIds } = req.body;
+
+  if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
+
+  if (!Array.isArray(commentIds) || commentIds.length === 0)
+    throw new ApiError(400, "CommentIds must be provided");
+
+  const invalidId = commentIds.find((id) => !isValidObjectId(id));
+  if (invalidId)
+    throw new ApiError(400, `Invalid id found in commentIds ${invalidId}`);
+
+  // $in takes an array of commentIds here to match the commentId in the documents to those of in the array.
+  // only those documents will pass the stage that have the same comment id as that of those in the array.
+  const likes = await Like.aggregate([
+    {
+      $match: {
+        comment: {
+          $in: commentIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+      },
+    },
+
+    {
+      $group: {
+        _id: "$comment",
+        count: {
+          $sum: 1,
+        },
+      },
+    },
+  ]);
+
+  console.log("likes: ", likes);
+
+  const likesOnComments = commentIds.reduce((acc, id) => {
+    const found = likes.find((item) => String(item._id) === id);
+    acc[id] = found ? found.count : 0;
+    return acc;
+  }, {});
+
+  console.log("LikesonComment:", likesOnComments);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        likesOnComments,
+        "Successfully fetched likes count on all comments on a particular video"
+      )
+    );
+});
+
+export {
+  toggleCommentLike,
+  toggleTweetLike,
+  toggleVideoLike,
+  getLikedVideos,
+  getLikedComments,
+  getVideoLikesCount,
+  getCommentLikesCount,
+  getCommentLike,
+};

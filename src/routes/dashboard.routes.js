@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+    getChannelPlaylists,
     getChannelStats,
     getChannelVideos,
 } from "../controllers/dashboard.controller.js"
@@ -11,5 +12,6 @@ router.use(verifyJwt); // Apply verifyJWT middleware to all routes in this file
 
 router.route("/stats").get(getChannelStats);
 router.route("/videos").get(getChannelVideos);
+router.route("/playlists").get(getChannelPlaylists);
 
 export default router

@@ -28,32 +28,6 @@ const generateAccessAndRefreshTokens = async (userId) => {
 };
 
 const registerUser = asyncHandler(async (req, res) => {
-  // res.status(200).json({
-  //     message: "ok"
-  // })
-
-  // To register a user, first we need to get the values like username, email, password.
-
-  // Once we get the values, we need to check if the user already exists in the database.
-
-  // or if the user has send the values empty.
-
-  // if the user exists, we need to return a response saying that the user already exists.
-
-  // if the user does not exist, then check for the images, and avatar.
-
-  // upload the images to cloudinary. and get the url;
-
-  // create a user object - create entry in db;
-
-  // when returning the response -  remove the passrord and refresh token from the user object.
-
-  // check if the user is successfully registered;
-
-  // if the user is successfully registered, then return a response saying that the user is successfully registered.
-
-  // if the data is coming from the form, then we can access the data using req.body;
-
   const { username, email, password, fullName } = req.body;
 
   console.log("email: ", email);
@@ -88,18 +62,21 @@ const registerUser = asyncHandler(async (req, res) => {
     coverImagePath = req.files.coverImage[0].path;
   }
 
-  // console.log(req.files);
+  console.log(req.files);
 
   console.log("filePath: ", avatarPath, ", ", coverImagePath);
 
   if (!avatarPath) throw new ApiError(400, "Avatar is required");
-  //   if (!coverImagePath) throw new ApiError(400, "Cover Image is required");
+  if (!coverImagePath) throw new ApiError(400, "Cover Image is required");
 
   const avatar = await uploadOnCloudinary(avatarPath);
   const coverImage = await uploadOnCloudinary(coverImagePath);
 
   if (!avatar) throw new ApiError(500, "Avatar upload failed");
-  //   if(!coverImage) throw new ApiError(500, "Cover Image upload failed");
+  if (!coverImage) throw new ApiError(500, "Cover Image upload failed");
+
+  console.log("coverImage: ", coverImage);
+  console.log("avatar: ", avatar);
 
   const user = await User.create({
     fullName,
@@ -107,7 +84,7 @@ const registerUser = asyncHandler(async (req, res) => {
     username: username.toLowerCase(),
     password,
     avatar: avatar.url,
-    coverImage: coverImage?.url || "",
+    coverImage: coverImage.url || "",
   });
 
   const createdUser = await User.findById(user._id).select(
@@ -127,11 +104,17 @@ const loginUser = asyncHandler(async (req, res) => {
   // find the user based on email or username;
   // check the password sent by user with one stored in database.
   // if matched send refresh and accessTokens to the user in the form of secured cookies.
-  
+
   // console.log(req.body);
-  const { email, username, password} = req.body;
-  // console.log(email);
+  const { email, username, password } = req.body;
+
+  // console.log("emailorusername: ", emailorusername);
+  console.log("password: ", password);
+  console.log("email: ", email);
+  console.log("username: ", username);
+
   if (!username && !email) throw new ApiError(401, "All fields are required");
+  // if (!emailorusername) throw new ApiError(401, "All fields are required");
 
   const user = await User.findOne({
     $or: [{ email }, { username }],
@@ -196,13 +179,14 @@ const logOutUser = asyncHandler(async (req, res) => {
   const options = {
     httpOnly: true,
     secure: true,
+    expires: new Date(Date.now() - 1000), // setting the expiry date to past to clear the cookie.
   };
 
   return res
     .status(200)
     .clearCookie("accessToken", options)
     .clearCookie("refreshToken", options)
-    .json(new ApiResponse(201, {}, "User logged out successfully"));
+    .json(new ApiResponse(200, {}, "User logged out successfully"));
 });
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
@@ -377,9 +361,19 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     },
 
     {
+      $lookup: {
+        from: "videos",
+        localField: "_id",
+        foreignField: "owner",
+        as: "videos",
+      },
+    },
+
+    {
       $addFields: {
         subscribersCount: { $size: "$subscribers" },
         subscribedToCount: { $size: "$subscribedTo" },
+        videosCount: { $size: "$videos" },
         isSubscribed: {
           $cond: {
             if: { $in: [req.user?._id, "$subscribers.subscriber"] },
@@ -400,6 +394,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
         isSubscribed: 1,
         avatar: 1,
         coverImage: 1,
+        videosCount: 1,
       },
     },
   ]);

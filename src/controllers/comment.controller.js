@@ -7,21 +7,25 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 const getVideoComments = asyncHandler(async (req, res) => {
   //TODO: get all comments for a video
   const { videoId } = req.params;
-  const { page = 1, limit = 10 } = req.query;
+  const {
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortType = "desc",
+  } = req.query;
 
   const userId = req.user?._id;
 
-  if(!isValidObjectId(userId))
+  if (!isValidObjectId(userId))
     throw new ApiError(404, "please login first to view comments");
 
-  if(!isValidObjectId(videoId))
-    throw new ApiError(404, "invalid video id");
+  if (!isValidObjectId(videoId)) throw new ApiError(404, "invalid video id");
 
   const comments = await Comment.aggregate([
     {
       $match: {
         video: new mongoose.Types.ObjectId(videoId),
-      }
+      },
     },
 
     {
@@ -36,18 +40,18 @@ const getVideoComments = asyncHandler(async (req, res) => {
               fullName: 1,
               username: 1,
               avatar: 1,
-            }
-          }
-        ]
-      }
+            },
+          },
+        ],
+      },
     },
 
     {
       $addFields: {
         owner: {
           $first: "$owner",
-        } 
-      }
+        },
+      },
     },
 
     {
@@ -55,7 +59,14 @@ const getVideoComments = asyncHandler(async (req, res) => {
         video: 1,
         content: 1,
         owner: 1,
-      }
+        createdAt: 1,
+      },
+    },
+
+    {
+      $sort: {
+        [sortBy]: sortType === "desc" ? -1 : 1,
+      },
     },
 
     {
@@ -63,17 +74,62 @@ const getVideoComments = asyncHandler(async (req, res) => {
     },
 
     {
-      $limit: parseInt(limit)
-    }
-  ])
+      $limit: parseInt(limit),
+    },
+  ]);
+
+  if (comments.length === 0)
+    throw new ApiError(404, "No comments found for this user");
 
   console.log("All comments: ", comments);
 
+  const totalComments = await Comment.countDocuments({
+    video: new mongoose.Types.ObjectId(videoId),
+  });
+
+  const hasMore = page * limit < totalComments;
+
   return res
-        .status(200)
-        .json(
-          new ApiResponse(200, comments, "successfully fetched the comments")
-        );
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        { comments, hasMore },
+        "successfully fetched the comments"
+      )
+    );
+});
+
+const getVideoCommentsCount = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  const { videoId } = req.params;
+
+  if (!isValidObjectId(userId))
+    throw new ApiError(400, "Please login first to continue");
+
+  if (!isValidObjectId(videoId)) throw new ApiError(401, "Invalid Video Id");
+
+  const totalComments = await Comment.countDocuments({
+    video: new mongoose.Types.ObjectId(videoId),
+  });
+
+  console.log("Total Comments on the video: ", totalComments);
+
+  if (!totalComments)
+    throw new ApiError(
+      500,
+      "Some error occured while displaying comments count"
+    );
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        totalComments,
+        "Successfully fetched total comments on the video"
+      )
+    );
 });
 
 const addComment = asyncHandler(async (req, res) => {
@@ -101,12 +157,17 @@ const addComment = asyncHandler(async (req, res) => {
     owner: new mongoose.Types.ObjectId(userId),
   });
 
+  const addedComment = await Comment.findById(comment._id).populate(
+    "owner",
+    "username avatar createdAt"
+  );
+
   if (!comment)
     throw new ApiError(500, "sorry, something went wrong while adding comment");
 
   return res
     .status(201)
-    .json(new ApiResponse(201, comment, "comment successfully added"));
+    .json(new ApiResponse(201, addedComment, "comment successfully added"));
 });
 
 const updateComment = asyncHandler(async (req, res) => {
@@ -138,7 +199,9 @@ const updateComment = asyncHandler(async (req, res) => {
     },
 
     { new: true }
-  );
+  ).populate("owner", "username avatar createdAt");
+
+  console.log("Updated Comment: ", updatedComment);
 
   if (!updatedComment)
     throw new ApiError(
@@ -156,19 +219,19 @@ const deleteComment = asyncHandler(async (req, res) => {
   const { commentId } = req.params;
   const userId = req.user?._id;
 
-  if(!isValidObjectId(userId))
+  if (!isValidObjectId(userId))
     throw new ApiError(404, "please login first to delete comment");
 
-  if(!isValidObjectId(commentId))
+  if (!isValidObjectId(commentId))
     throw new ApiError(404, "invalid comment id");
 
   const comment = await Comment.findById(
     new mongoose.Types.ObjectId(commentId)
   );
 
-  if(!comment) throw new ApiError(404, "comment not found");
+  if (!comment) throw new ApiError(404, "comment not found");
 
-  if(comment.owner.toString() !== userId.toString())
+  if (comment.owner.toString() !== userId.toString())
     throw new ApiError(401, "you aren't authorised to delete the comment");
 
   await Comment.findByIdAndDelete(new mongoose.Types.ObjectId(commentId));
@@ -178,4 +241,10 @@ const deleteComment = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "comment successfully deleted"));
 });
 
-export { getVideoComments, addComment, updateComment, deleteComment };
+export {
+  getVideoComments,
+  getVideoCommentsCount,
+  addComment,
+  updateComment,
+  deleteComment,
+};

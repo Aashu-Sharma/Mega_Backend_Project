@@ -10,6 +10,7 @@ import likeRouter from './routes/like.routes.js';
 import subscriptionRouter from './routes/subscriptions.routes.js';
 import dashboardRouter from './routes/dashboard.routes.js';
 import healthcheckRouter from './routes/healthcheck.routes.js';
+import errorHandler from './middlewares/errorHandler.js';
 const app = express();
 
 //app.use allows us to use middleware
@@ -51,6 +52,9 @@ app.use("/api/v1/likes", likeRouter);
 app.use("/api/v1/subscriptions", subscriptionRouter);
 app.use("/api/v1/dashboard", dashboardRouter);
 app.use("/api/v1/healthcheck", healthcheckRouter)
+
+
+app.use(errorHandler);
 
 // outcome: https://localhost:3000/api/v1/users/register
 

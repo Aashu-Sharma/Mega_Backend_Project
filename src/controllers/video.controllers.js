@@ -7,6 +7,8 @@ import {
 } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import mongoose, {isValidObjectId} from "mongoose";
+import redisClient from "../redis-config/redis.config.js"; 
+import fs from  "fs";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const {
@@ -24,6 +26,8 @@ const getAllVideos = asyncHandler(async (req, res) => {
     ...(query ? { title: { $regex: query, $options: "i" } } : {}),
     ...(userId ? { owner: new mongoose.Types.ObjectId(userId) } : {}),
   };
+
+  //when neither userId nor title is provided, it will return all the documents in the collection.
 
   const videos = await Video.aggregate([
     {
@@ -92,7 +96,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
 // TODO: get video, upload to cloudinary, create video
 const publishVideo = asyncHandler(async (req, res) => {
-  const { title, description } = req.body;
+  const { title, description, isPublished } = req.body;
 
   if (!title || !description)
     throw new ApiError(400, "Title and description are required");
@@ -100,6 +104,13 @@ const publishVideo = asyncHandler(async (req, res) => {
   console.log("Accessing files coming from the request:", req.files);
 
   const videoPath = req.files?.videoFile[0]?.path;
+
+  const maxFileSize = process.env.MAX_FILE_SIZE || 100 * 1024 * 1024
+
+  const {size} = fs.statSync(videoPath)
+
+  if(size > maxFileSize)
+    throw new ApiError(400, `File size should be less than ${maxFileSize/(1024*1024)} MB`)
 
   const thumbnailPath = req.files?.thumbnail[0]?.path;
 
@@ -123,7 +134,7 @@ const publishVideo = asyncHandler(async (req, res) => {
     videoFile: video?.url,
     thumbnail: thumbnail?.url,
     duration: video?.duration,
-    isPublished: true,
+    isPublished,
     owner: req.user?._id,
   });
 
@@ -144,18 +155,25 @@ const getVideoById = asyncHandler(async (req, res) => {
   if(!isValidObjectId(videoId))
     throw new ApiError(400, "Invalid VideoId");
 
-  const incrementResult = await Video.updateOne(
-    {
-      _id: videoId,
-    },
+  const userId = req.user._id;
 
-    {
-      $inc: {views: 1},
-    }
-  )
+  if(!isValidObjectId(userId))
+    throw new ApiError(400, "Invalid userId");
 
-  if(incrementResult.matchedCount === 0)
-    throw new ApiError(404, "no video was found");
+  const viewKey = `viewed:${userId}:${videoId}`;
+
+  // console.log("ViewKey: ", viewKey)
+
+  const alreadyViewed = await redisClient.get(viewKey);
+
+  // console.log("AlreadyViewed: ", alreadyViewed);
+  
+  if(!alreadyViewed){
+    await Video.updateOne({_id: videoId}, {$inc: {views: 1}});
+    await redisClient.set(viewKey, "true", {EX: 86400})
+  }
+
+  // a bug here in views section is that whenever it finds the user has already viewed the video it won't update the viewcount even after  24 hrs have passed as it happens only when there video isn't already viewed. 
 
   const video = await Video.aggregate([
     {
@@ -216,17 +234,22 @@ const getVideoById = asyncHandler(async (req, res) => {
         views: 1,
         isPublished: 1,
         owner: 1,
+        createdAt: 1
       },
     },
   ]);
 
-  if (!video) throw new ApiError(401, "Unable to get the video for you!!!");
+  // console.log("Video: ", video)
 
-  console.log("VideoData: ", video);
+  const videoData = video[0];
+
+  if (!videoData) throw new ApiError(401, "Unable to get the video for you!!!");
+
+  console.log("VideoData: ", videoData);
 
   return res
     .status(200)
-    .json(new ApiResponse(201, video, "Video fetched successfully"));
+    .json(new ApiResponse(201, videoData, "Video fetched successfully"));
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {

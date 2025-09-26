@@ -168,9 +168,6 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
   ]);
   //TODO: get user playlists
 
-  if (!playlists || playlists.length === 0)
-    throw new ApiError(404, "No playlists found for this user");
-
   return res
     .status(200)
     .json(
@@ -304,18 +301,18 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
   if (playlist.owner.toString() !== userId.toString())
     throw new ApiError(400, "You are not authorised to perform this action");
 
-  // const updatedVideos = [...playlist.videos];
+  const updatedVideos = [...playlist.videos];
 
-  // console.log("Videos in the playlist before: ", updatedVideos);
+  console.log("Videos in the playlist before: ", updatedVideos);
 
-  // const exists = updatedVideos.some((video) => video.toString() === videoId.toString());
+  const exists = updatedVideos.some((video) => video.toString() === videoId.toString());
 
-  // if(exists) throw new ApiError(404, "Video already exists in the playlsit");
+  if(exists) throw new ApiError(404, "Video already exists in the playlsit");
 
-  // updatedVideos.push(new mongoose.Types.ObjectId(videoId));
+  updatedVideos.push(new mongoose.Types.ObjectId(videoId));
 
-  // console.log("UpdatedVideos: ", typeof updatedVideos);
-  // console.log("Videos in the playlist after adding new video: ", updatedVideos);
+  console.log("UpdatedVideos: ", typeof updatedVideos);
+  console.log("Videos in the playlist after adding new video: ", updatedVideos);
 
   // the code above also works fine, you just need to use $set while updating the playlist;
 
