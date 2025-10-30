@@ -235,7 +235,7 @@ const getLikedComments = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
 
-  if( !Array.isArray(commentIds) || commentIds.length === 0)
+  if (!Array.isArray(commentIds) || commentIds.length === 0)
     throw new ApiError(400, "CommentIds must be provided");
 
   const LikedComments = await Like.find(
@@ -246,8 +246,8 @@ const getLikedComments = asyncHandler(async (req, res) => {
       // }// it gives all liked comments by the user irrespective of the video under which the comments were made.
 
       comment: {
-        $in : commentIds.map((id) => new mongoose.Types.ObjectId(id))
-      }
+        $in: commentIds.map((id) => new mongoose.Types.ObjectId(id)),
+      },
     },
 
     {
@@ -271,7 +271,7 @@ const getLikedComments = asyncHandler(async (req, res) => {
         LikedCommentIds,
         "Successfully fetched the liked comments"
       )
-    )
+    );
 });
 
 const getVideoLikesCount = asyncHandler(async (req, res) => {
@@ -389,6 +389,134 @@ const getCommentLikesCount = asyncHandler(async (req, res) => {
     );
 });
 
+const getLikedTweets = asyncHandler(async (req, res) => {
+  // For getting all liked tweets by a user
+  const userId = req.user?._id;
+  const { tweetIds } = req.body;
+
+  if (!isValidObjectId(userId))
+    throw new ApiError(400, "Please login first to continue");
+
+  if (!Array.isArray(tweetIds) || tweetIds.length === 0)
+    throw new ApiError(400, "CommentIds must be provided");
+
+  const LikedTweets = await Like.find(
+    {
+      likedBy: new mongoose.Types.ObjectId(userId),
+      tweet: {
+        $in: tweetIds.map((id) => new mongoose.Types.ObjectId(id)),
+      },
+    },
+
+    {
+      tweet: 1,
+      _id: 0,
+    }
+  );
+
+  const LikedTweetIds = LikedTweets.map((like) => like.tweet);
+
+  if (LikedTweetIds === null)
+    throw new ApiError(500, "Some error occured while fetching liked tweets");
+
+  console.log("LikedTweets: ", LikedTweetIds);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        LikedTweetIds,
+        "Successfully fetched the liked tweets"
+      )
+    );
+});
+
+const getTweetLike = asyncHandler(async (req, res) => {
+  // for getting likes on a particular tweet
+  const userId = req.user?._id;
+  const { tweetId } = req.params;
+
+  if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
+
+  if (!isValidObjectId(tweetId)) throw new ApiError(400, "Invalid tweetId");
+
+  const totalLike = await Like.countDocuments(
+    {
+      tweet : new mongoose.Types.ObjectId(tweetId),
+    }
+  );
+
+  if(totalLike === null)
+    throw new ApiError(500, "Some error occured while fetching likes on the tweet");
+
+  console.log(`totalLikesOnTweetId ${tweetId}: ${totalLike} `);
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        totalLike,
+        `Successfully fetched the likes on tweetId ${tweetId}`
+      )
+    );
+});
+
+const getTweetsLikesCount = asyncHandler(async (req, res) => {
+  // for getting likes count on multiple tweets
+  const userId = req.user?._id;
+  const {tweetIds} = req.body;
+
+  if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
+
+  if (!Array.isArray(tweetIds) || tweetIds.length === 0)
+    throw new ApiError(400, "TweetIds must be provided");
+
+  const invalidId = tweetIds.find((id) => !isValidObjectId(id));
+  
+  if(invalidId) 
+    throw new ApiError(400, `Invalid id found in tweetIds ${invalidId}`);
+
+  const tweetsLikes = await Like.aggregate([
+    {
+      $match: {
+        tweet : {
+          $in: tweetIds.map((id) => new mongoose.Types.ObjectId(id))
+        }
+      }
+    },
+
+    {
+      $group: {
+        _id: "$tweet",
+        count: {
+          $sum: 1,
+        }
+      }
+    }
+  ]);
+
+  console.log("tweetsLikes: ", tweetsLikes);
+
+  const LikesOnTweets = tweetIds.reduce((acc, id) => {
+    const found = tweetsLikes.find((item) => String(item._id) === id);
+    acc[id] = found ? found.count : 0;
+    return acc;
+  }, {})
+  
+  console.log("LikesOnTweets:", LikesOnTweets);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        LikesOnTweets,
+        "Successfully fetched likes count on all tweets"
+      )
+    );
+});
+
 export {
   toggleCommentLike,
   toggleTweetLike,
@@ -398,4 +526,7 @@ export {
   getVideoLikesCount,
   getCommentLikesCount,
   getCommentLike,
+  getLikedTweets,
+  getTweetLike,
+  getTweetsLikesCount,
 };

@@ -2,6 +2,7 @@ import mongoose, { isValidObjectId } from "mongoose";
 import { Video } from "../models/video.model.js";
 import { Playlist } from "../models/playlist.model.js";
 import { Like } from "../models/like.model.js";
+import {Tweet} from '../models/tweets.model.js';
 import { Subscription } from "../models/subscription.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
@@ -239,7 +240,7 @@ const getChannelPlaylists = asyncHandler(async (req, res) => {
               views: 1,
               owner: 1,
             },
-          }
+          },
         ],
       },
     },
@@ -247,9 +248,9 @@ const getChannelPlaylists = asyncHandler(async (req, res) => {
     {
       $addFields: {
         owner: {
-          $first: "$owner"
-        }
-      }
+          $first: "$owner",
+        },
+      },
     },
 
     {
@@ -258,13 +259,13 @@ const getChannelPlaylists = asyncHandler(async (req, res) => {
         description: 1,
         owner: 1,
         videos: 1,
-      }
+      },
     },
 
     {
       $sort: {
         createdAt: -1,
-      }
+      },
     },
 
     {
@@ -278,20 +279,95 @@ const getChannelPlaylists = asyncHandler(async (req, res) => {
 
   console.log("Channel Playlists: ", channelPlaylists);
 
-  if(!channelPlaylists || channelPlaylists.length === 0){
+  if (!channelPlaylists || channelPlaylists.length === 0) {
     return res
-          .status(200)
-          .json(
-            new ApiResponse(200, [], "No playlists found for this user")
-          )
+      .status(200)
+      .json(new ApiResponse(200, [], "No playlists found for this user"));
   }
 
   return res
-        .status(200)
-        .json(
-          new ApiResponse(200, channelPlaylists, "Successfully fetched all the playlists")
-        )
-  
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        channelPlaylists,
+        "Successfully fetched all the playlists"
+      )
+    );
 });
 
-export { getChannelStats, getChannelVideos, getChannelPlaylists };
+const getChannelPosts = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+
+  if (!isValidObjectId(userId))
+    throw new ApiError(400, "Please login first");
+
+  const { page = 1, limit = 10 } = req.query;
+  const skip = (page - 1) * limit;
+
+  const tweets = await Tweet.aggregate([
+    {
+      $match: {
+        owner: new mongoose.Types.ObjectId(userId),
+      },
+    },
+
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              fullName: 1,
+              username: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $addFields: {
+        owner: {
+          $first: "$owner",
+        },
+      },
+    },
+
+    {
+      $project: {
+        content: 1,
+        images: 1,
+        owner: 1,
+        createdAt: 1,
+      },
+    },
+
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+
+    {
+      $skip: skip,
+    },
+
+    {
+      $limit: parseInt(limit),
+    },
+  ]);
+
+  if (!tweets || tweets.length === 0)
+    throw new ApiError(404, "No tweets found for this user");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, tweets, "Successfully fetched all the tweets"));
+});
+
+export { getChannelStats, getChannelVideos, getChannelPlaylists, getChannelPosts };

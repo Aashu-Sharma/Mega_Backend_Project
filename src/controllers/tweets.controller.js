@@ -17,6 +17,7 @@ const createTweet = asyncHandler(async (req, res) => {
 
   if (!content)
     throw new ApiError(400, "Nothing to add as tweet, please add some content");
+  console.log("Req.files: ", req.files);
 
   //   const images = req.files.map((file) => file.path)
 
@@ -49,17 +50,19 @@ const createTweet = asyncHandler(async (req, res) => {
     owner: userId,
   });
 
-  if (!tweet)
+  const newTweet = await Tweet.findById(tweet._id).populate("owner", "username avatar ")
+
+  if (!newTweet)
     throw new ApiError(
       500,
       "There was a problem adding your tweet, please try again later"
     );
 
-  console.log("Tweet: ", tweet);
+  console.log("Tweet: ", newTweet);
 
   return res
     .status(201)
-    .json(new ApiResponse(201, tweet, "Tweet created successfully"));
+    .json(new ApiResponse(201, newTweet, "Tweet created successfully"));
 });
 
 const updateTweet = asyncHandler(async (req, res) => {
