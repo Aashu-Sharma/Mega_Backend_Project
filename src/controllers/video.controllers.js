@@ -1,14 +1,15 @@
 import { ApiError } from "../utils/apiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Video } from "../models/video.model.js";
+import { User } from "../models/user.model.js";
 import {
   uploadOnCloudinary,
   deletFromCloudinary,
 } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
-import mongoose, {isValidObjectId} from "mongoose";
-import redisClient from "../redis-config/redis.config.js"; 
-import fs from  "fs";
+import mongoose, { isValidObjectId } from "mongoose";
+import redisClient from "../redis-config/redis.config.js";
+import fs from "fs";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const {
@@ -105,12 +106,15 @@ const publishVideo = asyncHandler(async (req, res) => {
 
   const videoPath = req.files?.videoFile[0]?.path;
 
-  const maxFileSize = process.env.MAX_FILE_SIZE || 100 * 1024 * 1024
+  const maxFileSize = process.env.MAX_FILE_SIZE || 100 * 1024 * 1024;
 
-  const {size} = fs.statSync(videoPath)
+  const { size } = fs.statSync(videoPath);
 
-  if(size > maxFileSize)
-    throw new ApiError(400, `File size should be less than ${maxFileSize/(1024*1024)} MB`)
+  if (size > maxFileSize)
+    throw new ApiError(
+      400,
+      `File size should be less than ${maxFileSize / (1024 * 1024)} MB`
+    );
 
   const thumbnailPath = req.files?.thumbnail[0]?.path;
 
@@ -147,18 +151,63 @@ const publishVideo = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, videoData, "video uploaded successfully"));
 });
 
+const addVideoToWatchHistory = async (videoId, userId) => {
+  //works for both adding and updating the watch history
+  // this function will be called whenever a user watches a video, and can be called inside getVideoById controller itself.
+  try {
+    const user = await User.findById(userId);
+
+    if (!user) throw new ApiError(404, "User not found");
+
+    const alreadyExists = user.watchHistory.find(
+      (item) => item.toString() === videoId.toString()
+    );
+
+    if (!alreadyExists) {
+      user.watchHistory.unshift(videoId);
+      if (user.watchHistory.length > 100) {
+        user.watchHistory.pop();
+      }
+      await user.save({ validateBeforeSave: false });
+    } else {
+      const indexOfVideo = user.watchHistory.findIndex(
+        (item) => item.toString() === videoId.toString()
+      );
+      if (indexOfVideo !== -1) {
+        user.watchHistory.splice(indexOfVideo, 1);
+        user.watchHistory.unshift(videoId);
+        await user.save({ validateBeforeSave: false });
+      }
+    }
+
+    console.log(
+      alreadyExists ? "watch history updated" : "video added to watch history"
+    );
+
+    return {
+      success: true,
+      message: alreadyExists
+        ? "Watch history updated"
+        : "Video added to watch history",
+    };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "something went wrong while adding video to watch history"
+    );
+  }
+};
+
 const getVideoById = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
   console.log("VideoId: ", videoId);
 
-  if(!isValidObjectId(videoId))
-    throw new ApiError(400, "Invalid VideoId");
+  if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid VideoId");
 
   const userId = req.user._id;
 
-  if(!isValidObjectId(userId))
-    throw new ApiError(400, "Invalid userId");
+  if (!isValidObjectId(userId)) throw new ApiError(400, "Invalid userId");
 
   const viewKey = `viewed:${userId}:${videoId}`;
 
@@ -167,13 +216,24 @@ const getVideoById = asyncHandler(async (req, res) => {
   const alreadyViewed = await redisClient.get(viewKey);
 
   // console.log("AlreadyViewed: ", alreadyViewed);
-  
-  if(!alreadyViewed){
-    await Video.updateOne({_id: videoId}, {$inc: {views: 1}});
-    await redisClient.set(viewKey, "true", {EX: 86400})
+
+  if (!alreadyViewed) {
+    await Video.updateOne({ _id: videoId }, { $inc: { views: 1 } });
+    await redisClient.set(viewKey, "true", { EX: 86400 });
   }
 
-  // a bug here in views section is that whenever it finds the user has already viewed the video it won't update the viewcount even after  24 hrs have passed as it happens only when there video isn't already viewed. 
+  try {
+    const addToHistory = await addVideoToWatchHistory(videoId, userId);
+    if (!addToHistory?.success) {
+      console.log("Watch history not updated:", addToHistory.message);
+    } else {
+      console.log(addToHistory.message);
+    }
+  } catch (err) {
+    console.error("Error adding video to watch history:", err.message);
+  }
+
+  // a bug here in views section is that whenever it finds the user has already viewed the video it won't update the viewcount even after  24 hrs have passed as it happens only when there video isn't already viewed.
 
   const video = await Video.aggregate([
     {
@@ -234,7 +294,7 @@ const getVideoById = asyncHandler(async (req, res) => {
         views: 1,
         isPublished: 1,
         owner: 1,
-        createdAt: 1
+        createdAt: 1,
       },
     },
   ]);

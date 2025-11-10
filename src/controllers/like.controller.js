@@ -142,90 +142,46 @@ const getLikedVideos = asyncHandler(async (req, res) => {
   if (!isValidObjectId(userId))
     throw new ApiError(400, "Please login first to continue");
 
-  const Likedvideos = await Like.aggregate([
-    {
-      $match: {
-        likedBy: new mongoose.Types.ObjectId(userId),
-        video: {
-          $exists: true,
-        },
-      },
+  const likedVideos = await Like.find({
+    likedBy: new mongoose.Types.ObjectId(userId),
+    video: {
+      $exists: true,
     },
-
-    {
-      $lookup: {
-        from: "videos",
-        localField: "video",
-        foreignField: "_id",
-        as: "video",
-        pipeline: [
-          {
-            $lookup: {
-              from: "users",
-              localField: "owner",
-              foreignField: "_id",
-              as: "owner",
-              pipeline: [
-                {
-                  $project: {
-                    username: 1,
-                    avatar: 1,
-                    fullName: 1,
-                  },
-                },
-              ],
-            },
-          },
-
-          {
-            $addFields: {
-              owner: {
-                $first: "$owner",
-              },
-            },
-          },
-
-          {
-            $project: {
-              videoFile: 1,
-              thumbnail: 1,
-              title: 1,
-              duration: 1,
-              views: 1,
-              owner: 1,
-            },
-          },
-        ],
+  }).sort({createdAt: -1})
+    .select("-_id -likedBy -createdAt -updatedAt -__v")
+    .populate({
+      path: "video",
+      select: "videoFile thumbnail views title description owner",
+      populate: {
+        path: "owner",
+        select: "username avatar",
       },
-    },
+    });
 
-    {
-      $addFields: {
-        likedVideo: {
-          $first: "$video",
-        },
-      },
-    },
-
-    {
-      $project: {
-        likedVideo: 1,
-      },
-    },
-  ]);
-
-  if (!Likedvideos)
+  if (!likedVideos)
     throw new ApiError(
       500,
-      "There was an error while displaying your likedVideos"
+      "There was an error while fetching your likedVideos"
     );
 
-  console.log("LikedVideos: ", Likedvideos);
+  const finalLikedVideos = likedVideos.map((video) => video.video);
+  console.log("finalLikedVideos: ", finalLikedVideos);
+  console.log("length: ", finalLikedVideos.length);
+
+  if (finalLikedVideos.length === 0) {
+    return res
+      .status(200)
+      .json(new ApiResponse(200, [], "NO LikedVideos found"));
+  }
 
   return res
     .status(200)
     .json(
-      new ApiResponse(200, Likedvideos, "successfully fetched the likedVideos")
+      new ApiResponse(
+        200,
+        finalLikedVideos,
+        "successfully fetched the likedVideos"
+      )
     );
 });
 
@@ -441,14 +397,15 @@ const getTweetLike = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(tweetId)) throw new ApiError(400, "Invalid tweetId");
 
-  const totalLike = await Like.countDocuments(
-    {
-      tweet : new mongoose.Types.ObjectId(tweetId),
-    }
-  );
+  const totalLike = await Like.countDocuments({
+    tweet: new mongoose.Types.ObjectId(tweetId),
+  });
 
-  if(totalLike === null)
-    throw new ApiError(500, "Some error occured while fetching likes on the tweet");
+  if (totalLike === null)
+    throw new ApiError(
+      500,
+      "Some error occured while fetching likes on the tweet"
+    );
 
   console.log(`totalLikesOnTweetId ${tweetId}: ${totalLike} `);
   return res
@@ -465,7 +422,7 @@ const getTweetLike = asyncHandler(async (req, res) => {
 const getTweetsLikesCount = asyncHandler(async (req, res) => {
   // for getting likes count on multiple tweets
   const userId = req.user?._id;
-  const {tweetIds} = req.body;
+  const { tweetIds } = req.body;
 
   if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
 
@@ -473,17 +430,17 @@ const getTweetsLikesCount = asyncHandler(async (req, res) => {
     throw new ApiError(400, "TweetIds must be provided");
 
   const invalidId = tweetIds.find((id) => !isValidObjectId(id));
-  
-  if(invalidId) 
+
+  if (invalidId)
     throw new ApiError(400, `Invalid id found in tweetIds ${invalidId}`);
 
   const tweetsLikes = await Like.aggregate([
     {
       $match: {
-        tweet : {
-          $in: tweetIds.map((id) => new mongoose.Types.ObjectId(id))
-        }
-      }
+        tweet: {
+          $in: tweetIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+      },
     },
 
     {
@@ -491,9 +448,9 @@ const getTweetsLikesCount = asyncHandler(async (req, res) => {
         _id: "$tweet",
         count: {
           $sum: 1,
-        }
-      }
-    }
+        },
+      },
+    },
   ]);
 
   console.log("tweetsLikes: ", tweetsLikes);
@@ -502,8 +459,8 @@ const getTweetsLikesCount = asyncHandler(async (req, res) => {
     const found = tweetsLikes.find((item) => String(item._id) === id);
     acc[id] = found ? found.count : 0;
     return acc;
-  }, {})
-  
+  }, {});
+
   console.log("LikesOnTweets:", LikesOnTweets);
 
   return res

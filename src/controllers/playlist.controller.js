@@ -1,4 +1,4 @@
-import mongoose, { isValidObjectId, mongo } from "mongoose";
+import mongoose, { isValidObjectId } from "mongoose";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -235,14 +235,14 @@ const getPlaylistById = asyncHandler(async (req, res) => {
               ],
             },
           },
-          
+
           {
             $addFields: {
               owner: {
-                $first: "$owner"
-              }
-            }
-          }
+                $first: "$owner",
+              },
+            },
+          },
         ],
       },
     },
@@ -251,8 +251,8 @@ const getPlaylistById = asyncHandler(async (req, res) => {
       $addFields: {
         owner: {
           $first: "$owner",
-        }
-      }
+        },
+      },
     },
 
     {
@@ -261,18 +261,19 @@ const getPlaylistById = asyncHandler(async (req, res) => {
         description: 1,
         owner: 1,
         videos: 1,
-      }
-    }
+      },
+    },
   ]);
 
-  if(!playlist)
-    throw new ApiError(500, "Couldn't fetch the playlist. Please try again later");
+  if (!playlist)
+    throw new ApiError(
+      500,
+      "Couldn't fetch the playlist. Please try again later"
+    );
 
   return res
-        .status(200)
-        .json(
-          new ApiResponse(200, playlist, "successfully fetched the playlist")
-        )
+    .status(200)
+    .json(new ApiResponse(200, playlist, "successfully fetched the playlist"));
 
   //TODO: get playlist by id
 });
@@ -305,9 +306,11 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
 
   console.log("Videos in the playlist before: ", updatedVideos);
 
-  const exists = updatedVideos.some((video) => video.toString() === videoId.toString());
+  const exists = updatedVideos.some(
+    (video) => video.toString() === videoId.toString()
+  );
 
-  if(exists) throw new ApiError(404, "Video already exists in the playlsit");
+  if (exists) throw new ApiError(404, "Video already exists in the playlsit");
 
   updatedVideos.push(new mongoose.Types.ObjectId(videoId));
 
@@ -371,20 +374,6 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
 
   if (playlist.owner.toString() !== userId.toString())
     throw new ApiError(400, "You are not authorised to perform this action");
-
-  // const videoIndex = playlist.videos.findIndex(
-  //   (video) => video.toString() === videoId.toString()
-  // );
-
-  // console.log("VideoIndex: ", videoIndex);
-
-  // if(videoIndex === -1) throw new ApiError("Video not found in the playlist");
-
-  // const updatedVideos = [...playlist.videos];
-
-  // console.log("UpdatedVideos: ", updatedVideos);
-
-  // updatedVideos.splice(videoIndex, 1);
 
   const updatedPlaylist = await Playlist.findByIdAndUpdate(
     new mongoose.Types.ObjectId(playlistId),
@@ -454,6 +443,9 @@ const updatePlaylist = asyncHandler(async (req, res) => {
 
   console.log("description: ", typeof description);
 
+  console.log("name of playlist: ", name);
+  console.log("Description: ", description);
+
   const playlist = await Playlist.findById(
     new mongoose.Types.ObjectId(playlistId)
   );
@@ -468,8 +460,13 @@ const updatePlaylist = asyncHandler(async (req, res) => {
         name: name || playlist.name,
         description: description || playlist.description,
       },
+    },
+    {
+      new: true,
     }
   );
+
+  console.log("Updated Playlist: ", updatedPlaylist);
 
   if (!updatedPlaylist)
     throw new ApiError(

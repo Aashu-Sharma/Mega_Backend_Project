@@ -1,13 +1,15 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
+import { Video } from "../models/video.model.js";
 import {
   uploadOnCloudinary,
   deletFromCloudinary,
 } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
+import { isValidObjectId } from "mongoose";
+import mongoose from 'mongoose';
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -413,62 +415,82 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
 // Note: _id returns a string, but due to mongoose it is converted to an objectId.
 // Here, we will need to access the ObjectId of the user to get the watch history.
 const getUserWatchHistory = asyncHandler(async (req, res) => {
-  const user = await User.aggregate([
-    {
-      $match: {
-        _id: new mongoose.Types.ObjectId(req.user?._id),
-      },
-    }, // return the user with the given id
-    {
-      $lookup: {
-        from: "videos",
-        foreignField: "_id",
-        localField: "watchHistory",
-        as: "watchHistory",
-        pipeline: [
-          {
-            $lookup: {
-              from: "users",
-              localField: "owner",
-              foreignField: "_id",
-              as: "owner",
-              pipeline: [
-                {
-                  $project: {
-                    fullName: 1,
-                    username: 1,
-                    avatar: 1,
-                  },
-                },
-              ],
-            },
-          }, // returned the owner of the video with the given id as array.
+  const userId = req.user?._id;
 
-          {
-            $addFields: {
-              owner: {
-                $first: "$owner", // gets the owner details as object from the owner Field which was an array.
-              },
-            },
-          },
-        ],
-      },
+  const user = await User.findById(userId).lean();
+  if (!user) throw new ApiError(404, "user not found");
+  const videos = await Video.find({
+    _id: {
+      $in: user.watchHistory,
     },
-  ]);
+  })
+    .populate("owner", "username avatar _id")
+    .select(
+      "videoFile title description thumbnail duration createdAt views owner "
+    )
+    .lean();
 
-  if (!user?.length) throw new ApiError(404, "user not found");
-  console.log("User: ", user);
-  console.log("Watch History: ", user[0]?.watchHistory);
+  // can optimize it further for larger watchHistory arrays by implementing pagination, and using Map().
+
+  if (!videos || videos.length === 0) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, user.watchHistory, "No videos in watch history")
+      );
+  }
+
+  // sorting the videos based on the order in watchHistory
+  const watchHistoryVideos = user.watchHistory.map((videoId) =>
+    videos.find((video) => video._id.toString() === videoId.toString())
+  );
+
+  console.log("Watch History Videos: ", watchHistoryVideos);
+  user.watchHistory = watchHistoryVideos;
+
+  console.log("Watch History: ", user?.watchHistory);
 
   return res
     .status(200)
     .json(
       new ApiResponse(
-        201,
-        user[0]?.watchHistory,
+        200,
+        user.watchHistory,
         "Watch history fetched successfully"
       )
     );
+});
+
+const removeVideoFromWatchHistory = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  if (!userId) throw new ApiError(400, "Please login first to continue");
+
+  const { videoId } = req.params;
+  if (!isValidObjectId(videoId)) throw new ApiError(400, "Invalid VideoId");
+
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $pull: {
+        watchHistory: new mongoose.Types.ObjectId(videoId)
+      }
+    },
+    {
+      new: true,
+    }
+  )
+
+  console.log("Updated WatchHistory length: ", updatedUser.watchHistory.length );
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(
+      200,
+      updatedUser,
+      "successfully removed video from watchHistory"
+    )
+  )
 });
 
 export {
@@ -483,4 +505,5 @@ export {
   updateUserCoverImage,
   getUserChannelProfile,
   getUserWatchHistory,
+  removeVideoFromWatchHistory
 };

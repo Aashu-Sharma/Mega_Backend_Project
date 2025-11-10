@@ -8,6 +8,7 @@ import {
   logOutUser,
   refreshAccessToken,
   registerUser,
+  removeVideoFromWatchHistory,
   updateAccountDetails,
   updateUserAvatar,
   updateUserCoverImage,
@@ -32,7 +33,6 @@ router.route("/register").post(
   registerUser
 );
 
-
 router.route("/login").post(loginUser);
 
 router.route("/logOut").post(verifyJwt, logOutUser);
@@ -56,5 +56,8 @@ router
 router.route("/c/:username").get(verifyJwt, getUserChannelProfile);
 
 router.route("/watchHistory").get(verifyJwt, getUserWatchHistory);
+router
+  .route("/watchHistory/:videoId") 
+  .patch(verifyJwt, removeVideoFromWatchHistory);
 
 export default router;
