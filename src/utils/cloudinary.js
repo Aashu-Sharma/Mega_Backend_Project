@@ -28,7 +28,7 @@ const deletFromCloudinary = async(prevImage) => {
         if(!prevImage) return 'No image path provided';
         const publicId = prevImage.split('/').pop().split('.')[0];
         const response = await cloudinary.uploader.destroy(publicId, {
-            resource_type: 'auto',
+            resource_type: 'image',
         })
         console.log('File deleted successfully : ', response);
         return response;

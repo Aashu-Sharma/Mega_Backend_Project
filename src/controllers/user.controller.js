@@ -9,7 +9,7 @@ import {
 import { ApiResponse } from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
 import { isValidObjectId } from "mongoose";
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -238,10 +238,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 const changeCurrentPassword = asyncHandler(async (req, res) => {
   const { oldPassword, newPassword } = req.body;
   const user = await User.findById(req.user?._id);
+  console.log("oldPassword: ", oldPassword);
+  console.log("newPassword: ", newPassword);
 
   const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
 
-  if (!isPasswordCorrect) throw new ApiError(400, "invalid password");
+  if (!isPasswordCorrect) throw new ApiError(400, "password is incorrect");
 
   user.password = newPassword;
 
@@ -259,15 +261,24 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
-  const { fullName, email } = req.body;
+  const { username, email } = req.body;
 
-  if (!fullName || !email) throw new ApiError(400, "All fields are required");
+  if (!username && !email) throw new ApiError(400, "All fields are required");
+
+  if (email) {
+    const findUser = await User.findOne({
+      email: email,
+    });
+
+    if (findUser)
+      throw new ApiError(400, "user with this email already exists");
+  }
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
-        fullName: fullName,
+        username: username,
         email: email,
       },
     },
@@ -289,9 +300,12 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
   // delete the old avatar from cloudinary
 
-  if (req.user?.avatar) await deletFromCloudinary(req.user?.avatar);
+  const user = await User.findById(req.user?._id);
+  const oldAvatar = user.avatar;
+  console.log("old avatar: ", oldAvatar);
+  await deletFromCloudinary(oldAvatar);
 
-  const user = await User.findByIdAndUpdate(
+  const updateduser = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
@@ -304,7 +318,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(201, user, "avatar updated successfully"));
+    .json(new ApiResponse(201, updateduser, "avatar updated successfully"));
 });
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
@@ -316,7 +330,13 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
   if (!coverImage.url)
     throw new ApiError(400, "Error while uploading the coverImage");
 
-  const user = await User.findByIdAndUpdate(
+  const user = await User.findById(req.user?._id);
+  const oldCoverImage = user.coverImage;
+
+  console.log("old coverImage: ", oldCoverImage);
+  await deletFromCloudinary(oldCoverImage);
+
+  const updatedUser = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
@@ -329,7 +349,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(201, user, "coverImage updated successfully"));
+    .json(new ApiResponse(201, updatedUser, "coverImage updated successfully"));
 });
 
 const getUserChannelProfile = asyncHandler(async (req, res) => {
@@ -472,25 +492,25 @@ const removeVideoFromWatchHistory = asyncHandler(async (req, res) => {
     userId,
     {
       $pull: {
-        watchHistory: new mongoose.Types.ObjectId(videoId)
-      }
+        watchHistory: new mongoose.Types.ObjectId(videoId),
+      },
     },
     {
       new: true,
     }
-  )
+  );
 
-  console.log("Updated WatchHistory length: ", updatedUser.watchHistory.length );
+  console.log("Updated WatchHistory length: ", updatedUser.watchHistory.length);
 
   return res
-  .status(200)
-  .json(
-    new ApiResponse(
-      200,
-      updatedUser,
-      "successfully removed video from watchHistory"
-    )
-  )
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        updatedUser,
+        "successfully removed video from watchHistory"
+      )
+    );
 });
 
 export {
@@ -505,5 +525,5 @@ export {
   updateUserCoverImage,
   getUserChannelProfile,
   getUserWatchHistory,
-  removeVideoFromWatchHistory
+  removeVideoFromWatchHistory,
 };
