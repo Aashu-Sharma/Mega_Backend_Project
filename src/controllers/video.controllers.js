@@ -25,7 +25,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
   const match = {
     ...(query ? { title: { $regex: query, $options: "i" } } : {}),
-    ...(userId ? { owner: new mongoose.Types.ObjectId(userId) } : {}),
+    ...(userId ? { owner: new mongoose.Types.ObjectId(userId) } : {})
   };
 
   //when neither userId nor title is provided, it will return all the documents in the collection.
@@ -351,7 +351,7 @@ const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   const userId = req.user?._id;
 
-  const { title, description } = req.body;
+  const { title, description, isPublished } = req.body;
   const thumbnailpath = req.file?.path;
 
   const video = await Video.findById(videoId);
@@ -359,27 +359,31 @@ const updateVideo = asyncHandler(async (req, res) => {
   if (video.owner.toString() !== userId.toString())
     throw new ApiError(404, "you are not authorised to perform this action");
 
-  if (!title && !description && !thumbnailpath)
-    throw new ApiError(401, "neither title nor description is provide");
+  const updatedData = {};
 
-  let updatedThumbnail;
-  if (thumbnailpath) {
-    updatedThumbnail = await uploadOnCloudinary(thumbnailpath);
+  if(title) updatedData.title = title;
+  if(description) updatedData.description = description;
+  if(isPublished !== undefined) updatedData.isPublished = JSON.parse(isPublished);
+
+  if(thumbnailpath){
+    const updatedThumbnail = await uploadOnCloudinary(thumbnailpath);
     await deletFromCloudinary(video?.thumbnail);
+    updatedData.thumbnail = updatedThumbnail?.url;
+  }
+
+  if (Object.keys(updatedData).length === 0) {
+    throw new ApiError(400, "No updates to apply");
   }
 
   const updatedVideo = await Video.findByIdAndUpdate(
     videoId,
     {
-      $set: {
-        title,
-        description,
-        thumbnail: updatedThumbnail?.url,
-      },
+      $set: updatedData,
     },
-
     { new: true }
-  );
+  )
+
+  console.log("updatedVideo: ", updatedVideo);
 
   return res
     .status(201)

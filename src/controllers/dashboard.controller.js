@@ -239,6 +239,7 @@ const getChannelPlaylists = asyncHandler(async (req, res) => {
               duration: 1,
               views: 1,
               owner: 1,
+              isPublished: 1,
             },
           },
         ],

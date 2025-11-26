@@ -402,6 +402,39 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
     );
 });
 
+const removeVideoFromAllPlaylist = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  const userId = req.user?._id;
+
+  if (!isValidObjectId(userId)) throw new ApiError(401, "Please login first");
+
+  if (!isValidObjectId(videoId)) throw new ApiError(404, "Video id not sent");
+
+  const playlistswithVideoId = await Playlist.updateMany(
+    {
+      owner: new mongoose.Types.ObjectId(userId),
+      videos: new mongoose.Types.ObjectId(videoId)
+    },
+    {
+      $pull: {
+        videos: new mongoose.Types.ObjectId(videoId)
+      }
+    }, 
+  )
+
+  console.log("userPlaylists: ", playlistswithVideoId);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        playlistswithVideoId,
+        "successfully fetched all playlists that contain this video"
+      )
+    );
+});
+
 const deletePlaylist = asyncHandler(async (req, res) => {
   const { playlistId } = req.params;
   const userId = req.user?._id;
@@ -495,4 +528,5 @@ export {
   removeVideoFromPlaylist,
   deletePlaylist,
   updatePlaylist,
+  removeVideoFromAllPlaylist
 };

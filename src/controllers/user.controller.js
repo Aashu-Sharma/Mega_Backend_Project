@@ -446,7 +446,7 @@ const getUserWatchHistory = asyncHandler(async (req, res) => {
   })
     .populate("owner", "username avatar _id")
     .select(
-      "videoFile title description thumbnail duration createdAt views owner "
+      "videoFile title description thumbnail isPublished duration createdAt views owner "
     )
     .lean();
 

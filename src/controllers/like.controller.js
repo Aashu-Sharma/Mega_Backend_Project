@@ -151,7 +151,7 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     .select("-_id -likedBy -createdAt -updatedAt -__v")
     .populate({
       path: "video",
-      select: "videoFile thumbnail views title description owner",
+      select: "videoFile thumbnail views title description owner isPublished",
       populate: {
         path: "owner",
         select: "username avatar",
