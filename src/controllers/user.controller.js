@@ -180,8 +180,7 @@ const logOutUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: true,
-    expires: new Date(Date.now() - 1000), // setting the expiry date to past to clear the cookie.
+    secure: true
   };
 
   return res

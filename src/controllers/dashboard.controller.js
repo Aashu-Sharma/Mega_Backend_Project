@@ -151,10 +151,14 @@ const getChannelVideos = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (!channelVideos || channelVideos.length === 0)
+  if (channelVideos === null)
     throw new ApiError(404, "No video found for this user");
 
-  console.log("Channel Videos: ", channelVideos);
+  if(channelVideos.length === 0){
+    return res
+    .status(200)
+    .json(new ApiResponse(200, [], "No videos found for this user"));
+  }
 
   return res
     .status(200)
@@ -363,8 +367,14 @@ const getChannelPosts = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (!tweets || tweets.length === 0)
+  if (tweets === null)
     throw new ApiError(404, "No tweets found for this user");
+
+  if(tweets.length === 0){
+    return res
+    .status(200)
+    .json(new ApiResponse(200, [], "No tweets found for this user"));
+  }
 
   return res
     .status(200)

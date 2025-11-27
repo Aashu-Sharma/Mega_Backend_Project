@@ -88,7 +88,12 @@ const getAllVideos = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (!videos) throw new ApiError(404, "videos not found");
+  if (videos === null) throw new ApiError(404, "videos not found");
+  if( videos.length === 0){
+    return res
+    .status(200)
+    .json(new ApiResponse(200, [], "No videos found"));
+  }
 
   return res
     .status(200)
