@@ -50,7 +50,10 @@ const createTweet = asyncHandler(async (req, res) => {
     owner: userId,
   });
 
-  const newTweet = await Tweet.findById(tweet._id).populate("owner", "username avatar ")
+  const newTweet = await Tweet.findById(tweet._id).populate(
+    "owner",
+    "username avatar "
+  );
 
   if (!newTweet)
     throw new ApiError(
@@ -80,9 +83,15 @@ const updateTweet = asyncHandler(async (req, res) => {
 
   const { content } = req.body;
 
-  const imagePath = req.files.map((file) => file.path);
+  const imagePath = [];
 
-  console.log("ImagePath: ", imagePath.toString());
+  if (req.files && req.files.length > 0) {
+    req.files.forEach((file) => {
+      imagePath.push(file.path);
+    });
+  }
+
+  console.log("ImagePath: ", imagePath);
 
   if (!content && !imagePath)
     throw new ApiError(
@@ -90,39 +99,41 @@ const updateTweet = asyncHandler(async (req, res) => {
       "Nothing to update, please provide some content or images"
     );
 
-  const { imageToBeUpdated } = req.query;
+  // const { imageToBeUpdated } = req.query;
 
-  let imageIndex;
-  let updatedImages = [...tweet.images];
+  // let imageIndex;
+  // let updatedImages = [...tweet.images];
 
-  console.log("ImageToBeUpdated type: ", typeof imageToBeUpdated);
-  console.log("ImageToBeUpdated: ", imageToBeUpdated);
+  // console.log("ImageToBeUpdated type: ", typeof imageToBeUpdated);
+  // console.log("ImageToBeUpdated: ", imageToBeUpdated);
 
-  if (imagePath && imageToBeUpdated) {
-    console.log("Images Array: ", tweet.images);
-    imageIndex = tweet.images.findIndex(
-      (image) => image.toString() === imageToBeUpdated.toString()
+  // if (imagePath && imageToBeUpdated) {
+  //   console.log("Images Array: ", tweet.images);
+  //   imageIndex = tweet.images.findIndex(
+  //     (image) => image.toString() === imageToBeUpdated.toString()
+  //   );
+  //   console.log("ImageIndex: ", imageIndex);
+  //   if (imageIndex === -1) throw new ApiError(404, "Image not found in tweet");
+
+  //   let newImage = await uploadOnCloudinary(imagePath[0]);
+  //   await deletFromCloudinary(imageToBeUpdated);
+
+  //   updatedImages[imageIndex] = newImage?.url;
+  //   console.log("UpdatedImages: ", updatedImages);
+  // }
+
+  let imageUrls = [];
+  if (imagePath && imagePath.length > 0) {
+    imageUrls = await Promise.all(
+      imagePath.map(async (imagePath) => {
+        const image = await uploadOnCloudinary(imagePath);
+        console.log("Image: ", image.url);
+        return image?.url;
+      })
     );
-    console.log("ImageIndex: ", imageIndex);
-    if (imageIndex === -1) throw new ApiError(404, "Image not found in tweet");
-
-    let newImage = await uploadOnCloudinary(imagePath[0]);
-    await deletFromCloudinary(imageToBeUpdated);
-
-    updatedImages[imageIndex] = newImage?.url;
-    console.log("UpdatedImages: ", updatedImages);
   }
 
-  if (imagePath && !imageToBeUpdated) {
-    console.log("Images array:", tweet.images);
-
-    if (tweet.images.length === 3)
-      throw new ApiError(400, "You can only add upto 3 images to a tweet");
-
-    const newImage = await uploadOnCloudinary(imagePath[0]);
-    updatedImages.push(newImage?.url);
-    console.log("UpdatedImages: ", updatedImages);
-  }
+  console.log("imageUrls: ", imageUrls);
 
   const updatedTweet = await Tweet.findByIdAndUpdate(
     new mongoose.Types.ObjectId(tweetId),
@@ -130,7 +141,7 @@ const updateTweet = asyncHandler(async (req, res) => {
     {
       $set: {
         content: content || tweet.content,
-        images: updatedImages || tweet.images,
+        images: imageUrls || tweet.images,
       },
     },
 
@@ -206,7 +217,7 @@ const deleteTweet = asyncHandler(async (req, res) => {
           updatedTweet,
           "Image deleted from tweet successfully"
         )
-      )
+      );
   }
 
   await Tweet.findByIdAndDelete(new mongoose.Types.ObjectId(tweetId));
@@ -222,7 +233,7 @@ const getUserTweets = asyncHandler(async (req, res) => {
   if (!isValidObjectId(loggedInUserId))
     throw new ApiError(400, "Please login first");
 
-  const {userId} = req.params;
+  const { userId } = req.params;
   const { page = 1, limit = 10 } = req.query;
   const skip = (page - 1) * limit;
 
@@ -232,7 +243,7 @@ const getUserTweets = asyncHandler(async (req, res) => {
     {
       $match: {
         owner: new mongoose.Types.ObjectId(userId),
-      }
+      },
     },
 
     {
@@ -247,18 +258,18 @@ const getUserTweets = asyncHandler(async (req, res) => {
               fullName: 1,
               username: 1,
               avatar: 1,
-            }
-          }
-        ]
-      }
+            },
+          },
+        ],
+      },
     },
 
     {
       $addFields: {
         owner: {
           $first: "$owner",
-        }
-      }
+        },
+      },
     },
 
     {
@@ -267,13 +278,13 @@ const getUserTweets = asyncHandler(async (req, res) => {
         images: 1,
         owner: 1,
         createdAt: 1,
-      }
+      },
     },
 
     {
       $sort: {
         createdAt: -1,
-      }
+      },
     },
 
     {
@@ -283,24 +294,19 @@ const getUserTweets = asyncHandler(async (req, res) => {
     {
       $limit: parseInt(limit),
     },
-  ])
+  ]);
 
-  if(tweets === null)
-    throw new ApiError(404, "No tweets found for this user");
+  if (tweets === null) throw new ApiError(404, "No tweets found for this user");
 
-  if(tweets.length === 0){
+  if (tweets.length === 0) {
     return res
-    .status(200)
-    .json(
-      new ApiResponse(200, [], "No tweets found for this user")
-    )
+      .status(200)
+      .json(new ApiResponse(200, [], "No tweets found for this user"));
   }
 
   return res
     .status(200)
-    .json(
-      new ApiResponse(200, tweets, "Successfully fetched all the tweets")
-    )
+    .json(new ApiResponse(200, tweets, "Successfully fetched all the tweets"));
 });
 
 export { createTweet, getUserTweets, updateTweet, deleteTweet };

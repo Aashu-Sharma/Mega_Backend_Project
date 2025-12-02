@@ -16,7 +16,7 @@ router.route("/user/:userId").get(getUserTweets);
 router.route("/create").post(upload.array("images", 3), createTweet);
 router
   .route("/:tweetId")
-  .patch(upload.array("images", 1), updateTweet)
+  .patch(upload.array("images", 3), updateTweet)
   .delete(deleteTweet);
 
 export default router;
