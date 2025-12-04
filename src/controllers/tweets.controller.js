@@ -102,7 +102,7 @@ const updateTweet = asyncHandler(async (req, res) => {
   // const { imageToBeUpdated } = req.query;
 
   // let imageIndex;
-  // let updatedImages = [...tweet.images];
+  let updatedImages = [...tweet.images];
 
   // console.log("ImageToBeUpdated type: ", typeof imageToBeUpdated);
   // console.log("ImageToBeUpdated: ", imageToBeUpdated);
@@ -133,6 +133,8 @@ const updateTweet = asyncHandler(async (req, res) => {
     );
   }
 
+  updatedImages.push(...imageUrls);
+
   console.log("imageUrls: ", imageUrls);
 
   const updatedTweet = await Tweet.findByIdAndUpdate(
@@ -141,7 +143,7 @@ const updateTweet = asyncHandler(async (req, res) => {
     {
       $set: {
         content: content || tweet.content,
-        images: imageUrls || tweet.images,
+        images: updatedImages || tweet.images,
       },
     },
 
@@ -225,7 +227,46 @@ const deleteTweet = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, {}, "Tweet deleted successfully"));
-});
+}); 
+
+const deleteImageFromTweet = asyncHandler(async(req, res) => {
+  const loggedInUserId = req.user?._id;
+  if(!isValidObjectId(loggedInUserId))
+    throw new ApiError(400, "Please login first");
+
+  const {tweetId, index} = req.params;
+
+  const tweet = await Tweet.findById(new mongoose.Types.ObjectId(tweetId));
+
+  // const updatedImagesArray = tweet.images.filter((image) => image !== imageUrl);
+
+  const imageToBeDeleted = tweet.images[index];
+
+  const updatedImagesArray = tweet.images.filter((image) => image !== imageToBeDeleted);
+
+
+  const updatedTweet = await Tweet.findByIdAndUpdate(
+    new mongoose.Types.ObjectId(tweetId),
+    {
+      $set: {
+        images: updatedImagesArray || tweet.images
+      }
+    },
+    {
+      new: true,
+    }
+  );
+
+  if(updateTweet){
+    await deletFromCloudinary(imageToBeDeleted);
+  }
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(200, updatedTweet, "successfully deleted image")
+  )
+})
 
 const getUserTweets = asyncHandler(async (req, res) => {
   const loggedInUserId = req.user?._id;
@@ -309,4 +350,4 @@ const getUserTweets = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, tweets, "Successfully fetched all the tweets"));
 });
 
-export { createTweet, getUserTweets, updateTweet, deleteTweet };
+export { createTweet, getUserTweets, updateTweet, deleteTweet, deleteImageFromTweet };

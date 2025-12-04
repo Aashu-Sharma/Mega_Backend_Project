@@ -6,6 +6,7 @@ import {
   deleteTweet,
   updateTweet,
   getUserTweets,
+  deleteImageFromTweet,
 } from "../controllers/tweets.controller.js";
 
 const router = Router();
@@ -18,5 +19,7 @@ router
   .route("/:tweetId")
   .patch(upload.array("images", 3), updateTweet)
   .delete(deleteTweet);
+
+router.route("/:tweetId/:index").delete(deleteImageFromTweet);
 
 export default router;
